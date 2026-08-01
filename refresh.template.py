@@ -73,6 +73,49 @@ def log_success(colored_message, uncolored_message=''):
     _log_with_sgr(SGR.FG_GREEN, colored_message, uncolored_message)
 
 
+def _get_symlink_prefix():
+    """Read --symlink_prefix from .bazelrc, defaulting to 'bazel-' (Bazel default)."""
+    bazelrc = pathlib.Path('.bazelrc')
+    prefix = 'bazel-'
+    if bazelrc.is_file():
+        try:
+            for line in bazelrc.read_text().splitlines():
+                stripped = line.strip()
+                if stripped.startswith('build ') and '--symlink_prefix=' in stripped:
+                     # Handle: build --symlink_prefix=.bazel/
+                     # or:    build --symlink_prefix=bazel-
+                    for part in stripped.split():
+                        if part.startswith('--symlink_prefix='):
+                            prefix = part.split('=', 1)[1]
+                            break
+        except OSError:
+            pass
+    return prefix
+
+
+def _bazel_out_name():
+    """Return the workspace-relative name of the bazel-out symlink.
+    E.g. 'bazel-out' for default prefix, '.bazel/out' for .bazel/ prefix."""
+    prefix = _get_symlink_prefix()
+     # Strip trailing slash if present
+    prefix = prefix.rstrip('/')
+    return f'{prefix}out'
+
+
+def _bazel_bin_name():
+    """Return the workspace-relative name of the bazel-bin symlink."""
+    prefix = _get_symlink_prefix()
+    prefix = prefix.rstrip('/')
+    return f'{prefix}bin'
+
+
+def _bazel_testlogs_name():
+    """Return the workspace-relative name of the bazel-testlogs symlink."""
+    prefix = _get_symlink_prefix()
+    prefix = prefix.rstrip('/')
+    return f'{prefix}testlogs'
+
+
 def _print_header_finding_warning_once():
     """Gives users context about "compiler errors" while header finding. Namely that we're recovering."""
     # Shared between platforms
@@ -511,7 +554,7 @@ def _file_is_in_main_workspace_and_not_external(file_str: str):
         return False
 
     # ... but, ignore files in e.g. bazel-out/<configuration>/bin/external/
-    if file_path.parts[0] == 'bazel-out' and file_path.parts[3] == 'external':
+    if file_path.parts[0] == _bazel_out_name() and file_path.parts[3] == 'external':
         return False
 
     return True
@@ -1292,17 +1335,17 @@ def _ensure_external_workspaces_link_exists():
     is_windows = os.name == 'nt'
     source = pathlib.Path('external')
 
-    if not os.path.lexists('bazel-out'):
-        log_error(">>> //bazel-out is missing. Please remove --symlink_prefix and --experimental_convenience_symlinks, so the workspace mirrors the compilation environment.")
+    if not os.path.lexists(_bazel_out_name()):
+        log_error(f">>> /{_bazel_out_name()} is missing. Please remove --symlink_prefix and --experimental_convenience_symlinks, so the workspace mirrors the compilation environment.")
         # Crossref: https://github.com/hedronvision/bazel-compile-commands-extractor/issues/14 https://github.com/hedronvision/bazel-compile-commands-extractor/pull/65
         # Note: experimental_no_product_name_out_symlink is now enabled by default. See https://github.com/bazelbuild/bazel/commit/06bd3e8c0cd390f077303be682e9dec7baf17af2
         sys.exit(1)
 
     # Traverse into output_base via bazel-out, keeping the workspace position-independent, so it can be moved without rerunning
-    dest = pathlib.Path('bazel-out/../../../external')
+    dest = pathlib.Path(f'{_bazel_out_name()}/../../../external')
     if is_windows:
         # On Windows, unfortunately, bazel-out is a junction, and accessing .. of a junction brings you back out the way you came. So we have to resolve bazel-out first. Not position-independent, but I think the best we can do
-        dest = (pathlib.Path('bazel-out').resolve()/'../../../external').resolve()
+        dest = (pathlib.Path(_bazel_out_name()).resolve()/'../../../external').resolve()
 
     # Handle problem cases where //external exists
     if os.path.lexists(source): # MIN_PY=3.12: use source.exists(follow_symlinks=False), here and elsewhere.
