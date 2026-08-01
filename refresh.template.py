@@ -96,24 +96,19 @@ def _get_symlink_prefix():
 def _bazel_out_name():
     """Return the workspace-relative name of the bazel-out symlink.
     E.g. 'bazel-out' for default prefix, '.bazel/out' for .bazel/ prefix."""
-    prefix = _get_symlink_prefix()
-     # Strip trailing slash if present
-    prefix = prefix.rstrip('/')
-    return f'{prefix}out'
+    return f'{prefix}/out'
 
 
 def _bazel_bin_name():
     """Return the workspace-relative name of the bazel-bin symlink."""
     prefix = _get_symlink_prefix()
-    prefix = prefix.rstrip('/')
-    return f'{prefix}bin'
+    return f'{prefix}/bin'
 
 
 def _bazel_testlogs_name():
     """Return the workspace-relative name of the bazel-testlogs symlink."""
     prefix = _get_symlink_prefix()
-    prefix = prefix.rstrip('/')
-    return f'{prefix}testlogs'
+    return f'{prefix}/testlogs'
 
 
 def _print_header_finding_warning_once():
