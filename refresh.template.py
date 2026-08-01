@@ -96,6 +96,7 @@ def _get_symlink_prefix():
 def _bazel_out_name():
     """Return the workspace-relative name of the bazel-out symlink.
     E.g. 'bazel-out' for default prefix, '.bazel/out' for .bazel/ prefix."""
+    prefix = _get_symlink_prefix()
     return f'{prefix}/out'
 
 
