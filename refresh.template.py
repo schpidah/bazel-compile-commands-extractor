@@ -96,20 +96,19 @@ def _get_symlink_prefix():
 def _bazel_out_name():
     """Return the workspace-relative name of the bazel-out symlink.
     E.g. 'bazel-out' for default prefix, '.bazel/out' for .bazel/ prefix."""
-    prefix = _get_symlink_prefix()
-    return f'{prefix}/out'
+    # Bazel concatenates the prefix directly: 'bazel-' + 'out' -> 'bazel-out',
+    # '.bazel/' + 'out' -> '.bazel/out'.
+    return _get_symlink_prefix() + 'out'
 
 
 def _bazel_bin_name():
     """Return the workspace-relative name of the bazel-bin symlink."""
-    prefix = _get_symlink_prefix()
-    return f'{prefix}/bin'
+    return _get_symlink_prefix() + 'bin'
 
 
 def _bazel_testlogs_name():
     """Return the workspace-relative name of the bazel-testlogs symlink."""
-    prefix = _get_symlink_prefix()
-    return f'{prefix}/testlogs'
+    return _get_symlink_prefix() + 'testlogs'
 
 
 def _print_header_finding_warning_once():
@@ -550,8 +549,13 @@ def _file_is_in_main_workspace_and_not_external(file_str: str):
         return False
 
     # ... but, ignore files in e.g. bazel-out/<configuration>/bin/external/
-    if file_path.parts[0] == _bazel_out_name() and file_path.parts[3] == 'external':
-        return False
+    # Compare as paths, not as a single part: with --symlink_prefix=.bazel/ the
+    # bazel-out name is itself multi-component ('.bazel/out').
+    bazel_out_path = pathlib.PurePath(_bazel_out_name())
+    if _is_relative_to(file_path, bazel_out_path):
+        under_bazel_out = file_path.relative_to(bazel_out_path).parts # <configuration>/bin/external/...
+        if len(under_bazel_out) > 2 and under_bazel_out[2] == 'external':
+            return False
 
     return True
 
@@ -1153,6 +1157,14 @@ def _get_cpp_command_for_files(compile_action):
     compile_action.arguments = _emscripten_platform_patch(compile_action)
     # Android and Linux and grailbio LLVM toolchains: Fine as is; no special patching needed.
     compile_action.arguments = _all_platform_patch(compile_action.arguments)
+
+    # Point bazel-out/ paths at the actual convenience symlink before anything reads
+    # or writes them. Header extraction runs these arguments from the workspace root
+    # and embeds its header cache next to the action's -o output, so under a custom
+    # --symlink_prefix an unrewritten bazel-out/ would miss generated-header include
+    # dirs and materialize a stray bazel-out/ tree at the workspace root.
+    # Must run after _all_platform_patch, which matches on literal bazel-out/ paths.
+    compile_action.arguments = [_rewrite_bazel_paths(a) for a in compile_action.arguments]
 
     get_files_res = _get_files(compile_action)
     if get_files_res is None:
