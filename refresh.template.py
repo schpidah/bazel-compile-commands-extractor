@@ -1171,7 +1171,7 @@ def _rewrite_bazel_paths(path_str: str) -> str:
     out_name = _bazel_out_name()
 
     # Replace 'bazel-out/' with the correct symlink name
-    return path_str.replace('bazel-out/', out_name + '/')
+    return path_str.replace('bazel-out/', out_name)
 
 
 def _convert_compile_commands(aquery_output):
