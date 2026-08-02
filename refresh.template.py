@@ -1166,6 +1166,14 @@ def _get_cpp_command_for_files(compile_action):
     return source_files, header_files, compile_action.arguments
 
 
+def _rewrite_bazel_paths(path_str: str) -> str:
+    """Rewrite bazel-out/ paths to the workspace-relative symlink name."""
+    out_name = _bazel_out_name()
+
+    # Replace 'bazel-out/' with the correct symlink name
+    return path_str.replace('bazel-out/', out_name + '/')
+
+
 def _convert_compile_commands(aquery_output):
     """Converts from Bazel's aquery format to de-Bazeled compile_commands.json entries.
 
@@ -1213,9 +1221,9 @@ def _convert_compile_commands(aquery_output):
             if file == 'external/bazel_tools/src/tools/launcher/dummy.cc': continue # Suppress Bazel internal files leaking through. Hopefully will prevent issues like https://github.com/hedronvision/bazel-compile-commands-extractor/issues/77
             yield {
                 # Docs about compile_commands.json format: https://clang.llvm.org/docs/JSONCompilationDatabase.html#format
-                'file': file,
+                'file': _rewrite_bazel_paths(file),
                 # Using `arguments' instead of 'command' because it's now preferred by clangd. Heads also that  shlex.join doesn't work for windows cmd, so you'd need to use windows_list2cmdline if we ever switched back. For more, see https://github.com/hedronvision/bazel-compile-commands-extractor/issues/8#issuecomment-1090262263
-                'arguments': compile_command_args,
+                'arguments': [_rewrite_bazel_paths(a) for a in compile_command_args],
                 # Bazel gotcha warning: If you were tempted to use `bazel info execution_root` as the build working directory for compile_commands...search ImplementationReadme.md to learn why that breaks.
                 'directory': os.environ["BUILD_WORKSPACE_DIRECTORY"],
             }
